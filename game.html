@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Reveal Roles</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Pass-and-Reveal</h1>
+      <p class="subtitle">Each player taps only their own card once.</p>
+
+      <section class="panel">
+        <div class="meta-row">
+          <span id="playerMeta"></span>
+          <button id="newGameBtn" class="secondary">New Game</button>
+        </div>
+        <div id="cards" class="card-grid"></div>
+      </section>
+    </main>
+
+    <div id="revealModal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-content">
+        <h2 id="modalTitle"></h2>
+        <p id="modalBody"></p>
+        <button id="closeModalBtn">Hide & Lock Card</button>
+      </div>
+    </div>
+
+    <script src="/game.js"></script>
+  </body>
+</html>

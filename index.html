@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Imposter Word Game</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Imposter Word Game</h1>
+      <p class="subtitle">Set players and imposter range, then start.</p>
+
+      <section class="panel">
+        <label for="playerCount">Players: <span id="playerCountValue">6</span></label>
+        <input type="range" id="playerCount" min="1" max="10" value="6" />
+
+        <label for="minImposters">Min imposters: <span id="minImpostersValue">1</span></label>
+        <input type="range" id="minImposters" min="0" max="6" value="1" />
+
+        <label for="maxImposters">Max imposters: <span id="maxImpostersValue">2</span></label>
+        <input type="range" id="maxImposters" min="0" max="6" value="2" />
+
+        <p id="rangeSummary" class="note">
+          A random imposter count will be selected uniformly from 1 to 2.
+        </p>
+
+        <button id="startGameBtn">Start Game</button>
+        <p id="status" class="status"></p>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
