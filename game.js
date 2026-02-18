@@ -14,27 +14,19 @@ if (!sessionRaw) {
 
 const session = JSON.parse(sessionRaw || "{}");
 const players = session.players || 0;
+const minImposters = Number(session.minImposters ?? session.imposterCount ?? 0);
+const maxImposters = Number(session.maxImposters ?? session.imposterCount ?? 0);
 const imposterCount = Math.max(0, Math.min(session.imposterCount || 0, players));
+const judgeEnabled = Boolean(session.judgeEnabled);
 const word = session.word || "Unknown";
 const category = session.category || "Unknown";
-const hints = Array.isArray(session.hints) ? session.hints : [];
+const assignments = Array.isArray(session.assignments) ? session.assignments : [];
 
-function shuffle(arr) {
-  const copy = [...arr];
-  for (let i = copy.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
+if (!players || assignments.length !== players) {
+  window.location.href = "/";
 }
 
-const roles = shuffle([
-  ...Array(imposterCount).fill("imposter"),
-  ...Array(players - imposterCount).fill("crewmate"),
-]);
-
 let currentCard = null;
-let hintsUsed = 0;
 
 function lockCard(card) {
   card.classList.add("locked");
@@ -44,13 +36,14 @@ function lockCard(card) {
 
 function revealForPlayer(card) {
   const idx = Number(card.dataset.index);
-  const role = roles[idx];
+  const assignment = assignments[idx] || { role: "crewmate" };
 
-  if (role === "imposter") {
-    const hint = hints[hintsUsed] || "Think broad theme, not exact term.";
-    hintsUsed += 1;
+  if (assignment.role === "imposter") {
     modalTitle.textContent = `Player ${idx + 1}: Imposter`;
-    modalBody.textContent = `Hint: ${hint}`;
+    modalBody.textContent = `Category: ${category} | Hint: ${assignment.hint || "Think broad theme, not exact term."}`;
+  } else if (assignment.role === "judge") {
+    modalTitle.textContent = `Player ${idx + 1}: Judge`;
+    modalBody.textContent = `Word: ${word} (Category: ${category}). Your target is Player ${assignment.targetPlayerNumber}. Guide votes toward that player.`;
   } else {
     modalTitle.textContent = `Player ${idx + 1}: Crewmate`;
     modalBody.textContent = `Word: ${word} (Category: ${category})`;
@@ -62,7 +55,13 @@ function revealForPlayer(card) {
 
 function buildCards() {
   cardsContainer.innerHTML = "";
-  playerMeta.textContent = `${players} players | ${imposterCount} imposters`;
+  const usedRange = minImposters !== maxImposters;
+  if (usedRange) {
+    playerMeta.textContent = `${players} players`;
+  } else {
+    const judgeLabel = judgeEnabled ? " | 1 judge" : "";
+    playerMeta.textContent = `${players} players | ${imposterCount} imposters${judgeLabel}`;
+  }
 
   for (let i = 0; i < players; i += 1) {
     const btn = document.createElement("button");

@@ -1,0 +1,22 @@
+Return JSON only.
+Create a party-game secret word and one impostor hint.
+
+Rules:
+- Pick one random English target that can be any of:
+  - concrete noun
+  - abstract concept
+  - famous person (living or historical)
+  - real place/city/country/landmark
+  - Or more
+- Category should be broad and simple.
+- Avoid these recent words: {{RECENT_WORDS}}
+- If first choice is in avoid list, choose a different word.
+- Create exactly 1 hint word.
+- Hint must be intentionally low-information and hard to use.
+- Hint must be a single lowercase word from this list only:
+  ambient, blurred, distant, fleeting, muted, vague, subtle, hushed, restless, uneasy, tense, calm, hollow, weightless, drifting, dormant, latent, oblique, indirect, coded, veiled, fragile, faint, dim, shadowed, cool, dry, stale, noisy, still, stern, soft, cold, spare, blank, flat, loose, dull, quiet, odd
+- Prefer words from the list that are weakly related rather than directly related.
+- Do not explain the hint. Do not add punctuation.
+
+Format exactly as JSON:
+{"word":"...","category":"...","hint":"..."}
