@@ -4,130 +4,99 @@ const path = require("path");
 const PROMPT_TEMPLATE_PATH = path.join(__dirname, "..", "prompts", "gemini-game-prompt.txt");
 const PROMPT_TEMPLATE = fs.readFileSync(PROMPT_TEMPLATE_PATH, "utf8");
 
-const HINT_WORD_BANK = [
-  "ambient",
-  "blurred",
-  "distant",
-  "fleeting",
-  "muted",
-  "vague",
-  "subtle",
-  "hushed",
-  "restless",
-  "uneasy",
-  "tense",
-  "calm",
-  "hollow",
-  "weightless",
-  "drifting",
-  "dormant",
-  "latent",
-  "oblique",
-  "indirect",
-  "coded",
-  "veiled",
-  "fragile",
-  "faint",
-  "dim",
-  "shadowed",
-  "cool",
-  "dry",
-  "stale",
-  "noisy",
-  "still",
-  "stern",
-  "soft",
-  "cold",
-  "spare",
-  "blank",
-  "flat",
-  "loose",
-  "dull",
-  "quiet",
-  "odd",
-];
-
-function pickRandomHintWord() {
-  return HINT_WORD_BANK[Math.floor(Math.random() * HINT_WORD_BANK.length)];
-}
-
-function normalizeHint(rawHint, word, category) {
-  const bannedPieces = new Set(
-    `${word} ${category}`
-      .toLowerCase()
-      .replace(/[^a-z0-9\s'-]/g, " ")
-      .split(/\s+/)
-      .filter((p) => p.length >= 3),
-  );
-
-  if (typeof rawHint !== "string" || rawHint.trim().length === 0) {
-    return pickRandomHintWord();
-  }
-
-  const firstWord = rawHint
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9\s'-]/g, " ")
-    .split(/\s+/)
-    .filter(Boolean)[0];
-
-  if (!firstWord) return pickRandomHintWord();
-  if (bannedPieces.has(firstWord)) return pickRandomHintWord();
-  if (!HINT_WORD_BANK.includes(firstWord)) return pickRandomHintWord();
-  return firstWord;
-}
-
 async function generateWithGemini(imposterCount, recentWords, apiKey) {
   const recentWordsText = recentWords.length ? recentWords.join(", ") : "(none)";
   const prompt = PROMPT_TEMPLATE.replace("{{RECENT_WORDS}}", recentWordsText);
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 1.2,
-          topP: 0.95,
-          responseMimeType: "application/json",
-        },
-      }),
-    },
-  );
+  const configuredModels = (process.env.GEMINI_MODEL_FALLBACKS || "")
+    .split(",")
+    .map((m) => m.trim())
+    .filter(Boolean);
 
-  if (!response.ok) {
-    let detail = "";
-    try {
-      const errJson = await response.json();
-      detail = errJson?.error?.message || "";
-    } catch {
-      detail = "";
+  const modelsToTry = configuredModels.length
+    ? configuredModels
+    : [
+        "gemini-2.0-flash",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-2.5-flash-lite",
+      ];
+
+  const failures = [];
+
+  for (const model of modelsToTry) {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 1.2,
+            topP: 0.95,
+            responseMimeType: "application/json",
+          },
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      let detail = "";
+      try {
+        const errJson = await response.json();
+        detail = errJson?.error?.message || "";
+      } catch {
+        detail = "";
+      }
+      failures.push({
+        model,
+        status: response.status,
+        detail: detail || `Gemini API error: ${response.status}`,
+      });
+      continue;
     }
-    const error = new Error(detail || `Gemini API error: ${response.status}`);
-    error.status = response.status;
-    throw error;
+
+    const data = await response.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) {
+      failures.push({ model, status: 502, detail: "No Gemini response text." });
+      continue;
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      failures.push({ model, status: 502, detail: "Gemini returned non-JSON output." });
+      continue;
+    }
+
+    if (
+      typeof parsed.word !== "string" ||
+      typeof parsed.category !== "string" ||
+      typeof parsed.hint !== "string"
+    ) {
+      failures.push({ model, status: 502, detail: "Invalid Gemini JSON format." });
+      continue;
+    }
+
+    const word = parsed.word.trim();
+    const category = parsed.category.trim();
+    const hint = parsed.hint.trim();
+    return { word, category, hint, source: "gemini", model };
   }
 
-  const data = await response.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("No Gemini response text.");
-
-  const parsed = JSON.parse(text);
-  if (
-    typeof parsed.word !== "string" ||
-    typeof parsed.category !== "string" ||
-    typeof parsed.hint !== "string"
-  ) {
-    throw new Error("Invalid Gemini JSON format.");
-  }
-
-  const word = parsed.word.trim();
-  const category = parsed.category.trim();
-  const hint = normalizeHint(parsed.hint, word, category);
-
-  return { word, category, hint, source: "gemini" };
+  const allRateLimited = failures.length > 0 && failures.every((f) => f.status === 429);
+  const error = new Error(
+    failures.length
+      ? `All Gemini models failed: ${failures
+          .map((f) => `${f.model} (${f.status})`)
+          .join(", ")}`
+      : "No Gemini models configured.",
+  );
+  error.status = allRateLimited ? 429 : 502;
+  throw error;
 }
 
 module.exports = async function handler(req, res) {
